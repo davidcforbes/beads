@@ -255,6 +255,38 @@ Go's stdlib `regexp`. Visual Studio `cl.exe` by itself is not enough because
 Go passes GCC-style CGO flags; use a MinGW/MSYS2 toolchain, set `CC`, or set
 `WINDOWS_CGO_BINS` when building from source.
 
+<Warning>
+On Windows, setting `CC` to an absolute compiler path does not isolate the
+runtime DLLs loaded by compiler helpers such as `cc1.exe`. If another product's
+MinGW runtime directory appears earlier on `PATH`, Go may report only
+`runtime/cgo: ... cgo.exe: exit status 2` even though `gcc --version` works.
+Do not delete DLLs installed with PostgreSQL, Strawberry Perl, MSYS2, or another
+application. Prefix the selected toolchain's complete `bin` directory for the
+build process instead.
+</Warning>
+
+For example, to pin MSYS2 UCRT64 in the current PowerShell session and verify
+the compiler subprocess before building:
+
+```pwsh
+$toolchain = "C:\msys64\ucrt64\bin"
+$env:Path = "$toolchain;$env:Path"
+$env:CC = "$toolchain\gcc.exe"
+$env:CXX = "$toolchain\g++.exe"
+$env:CGO_ENABLED = "1"
+$env:GOFLAGS = "-tags=gms_pure_go"
+
+$cc1 = (& $env:CC -print-prog-name=cc1).Trim()
+& $cc1 --version
+go test -count=1 runtime/cgo
+make build
+```
+
+If `cc1.exe` exits `-1073741511` (`0xC0000139`, entry point not found), use
+`where.exe libwinpthread-1.dll` to inspect DLL search order. For a strong build
+check, point `GOCACHE` at a new temporary directory before testing so cached Go
+objects cannot hide a broken compiler process.
+
 **From source**:
 ```pwsh
 git clone https://github.com/gastownhall/beads

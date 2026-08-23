@@ -410,6 +410,18 @@ For testing commands, test design, and PR-readiness gates, use
 > `gms_pure_go` build tag. Always use `make install`, `./bd`, or
 > `go run -tags gms_pure_go ./cmd/bd ...` when you explicitly need `go run`.
 
+> **Windows CGO DLL ordering:** When explicitly setting an MSYS2/MinGW `CC`,
+> prepend that compiler's `bin` directory to `PATH` in the same process. An
+> absolute `CC` selects `gcc.exe`, but `cc1.exe` still resolves runtime DLLs
+> through `PATH`; another product's `libwinpthread-1.dll` can make Go report
+> only `runtime/cgo: ... cgo.exe: exit status 2`. `gcc --version` is not proof
+> that its helpers work. Resolve `cc1` with `gcc -print-prog-name=cc1`, run
+> `cc1 --version`, then verify `go test -count=1 runtime/cgo` using a fresh
+> `GOCACHE` before `make install`. The Makefile's toolchain auto-discovery
+> already prefixes the chosen directory; the explicit-`CC` path relies on the
+> caller to do so. Do not delete DLLs owned by PostgreSQL, Strawberry Perl,
+> MSYS2, or another installed application to repair build search order.
+
 ## Version Management
 
 **IMPORTANT**: When the user asks to "bump the version" or mentions a new version number (e.g., "bump to 0.9.3"), use the version bump script:
