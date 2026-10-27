@@ -32,16 +32,21 @@ package scripts_test
 // name-agnostic: no tool name earns an exemption.
 //
 // Scope: the non-test .go files of the packages that spawn from a context which
-// may have no console -- internal/doltserver, internal/doltversion and
-// internal/storage/dbproxy. Files that cannot build for Windows are out of
+// may have no console -- internal/doltserver, internal/doltversion,
+// internal/storage/dbproxy (the server tree under bd db-proxy-child), and
+// internal/remotecache, internal/storage/dolt and internal/storage/doltutil
+// (the dolt CLI push/fetch/fsck, remote and clone spawns, which bd running as
+// an MCP server reaches through bd dolt push/pull, sync and remote bootstrap)
+// -- plus two single files of cmd/bd: compact.go (dolt gc) and main.go (the
+// git config identity lookups). Files that cannot build for Windows are out of
 // scope, decided by go/build rather than by reading tags here: there is no
 // console window to suppress on those platforms, and demanding the Windows
 // helper in them would be noise (`//go:build !windows` in doltserver_unix.go,
 // the `_darwin.go` sweep and listener files, `//go:build unix` in the dbproxy
-// proxy). Production code elsewhere (cmd/bd, internal/storage/dolt, ...)
-// legitimately spawns with a console of its own; the day a new package starts
-// spawning from a console-less context, add its prefix to
-// consoleSpawnPackages -- that list is the policy's whole statement of scope.
+// proxy). The rest of cmd/bd (editors, git hooks, the interactive git
+// helpers) is not scanned yet; the day a new package or file starts spawning
+// from a console-less context, add its prefix to consoleSpawnPackages -- that
+// list is the policy's whole statement of scope.
 // shell-script and Bazel layers are not in scope: this is about Go process
 // creation.
 //
@@ -95,13 +100,19 @@ import (
 	"testing"
 )
 
-// consoleSpawnPackages are the package prefixes whose spawns run behind a
-// process that may have no console of its own. This list IS the policy's
-// scope: see the package comment.
+// consoleSpawnPackages are the path prefixes whose spawns run behind a
+// process that may have no console of its own: a package directory (with its
+// trailing slash), or a single file where the rest of its package is not yet
+// in scope. This list IS the policy's scope: see the package comment.
 var consoleSpawnPackages = []string{
+	"cmd/bd/compact.go",
+	"cmd/bd/main.go",
 	"internal/doltserver/",
 	"internal/doltversion/",
+	"internal/remotecache/",
 	"internal/storage/dbproxy/",
+	"internal/storage/dolt/",
+	"internal/storage/doltutil/",
 }
 
 // windowsBuildContext decides which files could be built for Windows. A file
@@ -396,6 +407,12 @@ func TestConsoleSpawnScope(t *testing.T) {
 		{"internal/doltversion/probe.go", true},
 		{"internal/storage/dbproxy/server/doltserver.go", true},
 		{"internal/storage/dbproxy/proxy/endpoint.go", true},
+		{"internal/remotecache/cache.go", true},
+		{"internal/storage/dolt/store.go", true},
+		{"internal/storage/dolt/bootstrap.go", true},
+		{"internal/storage/doltutil/remotes.go", true},
+		{"cmd/bd/compact.go", true},
+		{"cmd/bd/main.go", true},
 		// Platform files with no console to suppress.
 		{"internal/doltserver/doltserver_unix.go", false},
 		{"internal/doltserver/sweep_darwin.go", false},
@@ -417,12 +434,15 @@ func TestConsoleSpawnScope(t *testing.T) {
 		}
 	}
 
-	// Out-of-scope shapes: test files and packages that spawn with a console
-	// of their own are not this policy's business.
+	// Out-of-scope shapes: test files, the cmd/bd files outside the two named
+	// ones (a single-file prefix must not leak to its siblings), and a package
+	// whose name merely starts like an in-scope one.
 	for _, rel := range []string{
 		"internal/doltserver/doltserver_test.go",
+		"internal/storage/dolt/store_test.go",
 		"cmd/bd/dolt.go",
-		"internal/storage/dolt/store.go",
+		"cmd/bd/compact_gc.go",
+		"internal/storage/doltfake/x.go",
 	} {
 		if consoleSpawnInScope(rel) {
 			t.Errorf("%s: consoleSpawnInScope = true, want false", rel)
