@@ -370,13 +370,27 @@ does not inherit one. Windows allocates a brand new console for the child, and
 with Windows Terminal registered as the default terminal application that
 surfaces as a real window on the user's desktop.
 
-`bd` suppresses this at every spawn site by giving each child a console of its
-own that is never displayed (`CREATE_NO_WINDOW`):
+`bd` suppresses this by giving each child a console of its own that is never
+displayed (`CREATE_NO_WINDOW`). That covers the spawns a console-less `bd`
+reaches:
+
+- the `dolt sql-server` it manages, the `bd db-proxy-child` process, and
+  everything either one starts;
+- the `dolt` CLI behind `bd dolt push`, `bd dolt pull`, `bd sync` and remote
+  bootstrap: push, pull and fetch, the pre-push `dolt fsck`, `dolt remote`
+  add, list and remove, and `dolt clone`;
+- the `dolt gc` behind `bd admin compact`, and the `git config user.name` and
+  `git config user.email` lookups `bd` uses to name the actor.
+
+Other `git` commands and editor launches are not covered yet; they run from
+interactive commands, which have a console. A build-time policy test
+([`scripts/console_spawn_policy_test.go`](https://github.com/gastownhall/beads/blob/main/scripts/console_spawn_policy_test.go))
+fails on any new spawn in the covered code that does not suppress its console.
 
 - **Short-lived commands** (`dolt config`, `dolt init`, `dolt version`,
-  `git config`) are spawned with `CREATE_NO_WINDOW`. The child still receives a
-  console object, so anything querying console state keeps working, but it is
-  never displayed.
+  `dolt gc`, the CLI transfers, `git config`) are spawned with
+  `CREATE_NO_WINDOW`. The child still receives a console object, so anything
+  querying console state keeps working, but it is never displayed.
 - **Long-lived children** — the `dolt sql-server` spawns and
   `bd db-proxy-child` itself — use `CREATE_NO_WINDOW` alongside
   `CREATE_NEW_PROCESS_GROUP`. The console is the child's own, not the parent's,
